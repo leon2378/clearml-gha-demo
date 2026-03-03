@@ -31,10 +31,6 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-    #   - name: Sanity check ClearML SDK connectivity
-    #     run: |
-    #         python -c "from clearml import Task; t=Task.init(project_name='${CLEARML_PROJECT}', task_name='gha_sanity'); print('Task ID:', t.id); t.close()"
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -70,14 +66,14 @@ jobs:
             print("Created task:", t.id)
             t.close()
             EOF
-      - name: Connectivity check to ClearML
-        run: |
-            echo "API:   $CLEARML_API_HOST"
-            echo "WEB:   $CLEARML_WEB_HOST"
-            echo "FILES: $CLEARML_FILES_HOST"
-            curl -I --max-time 10 "$CLEARML_API_HOST" || true
-            curl -I --max-time 10 "$CLEARML_WEB_HOST" || true
-            curl -I --max-time 10 "$CLEARML_FILES_HOST" || true
+    #   - name: Connectivity check to ClearML
+    #     run: |
+    #         echo "API:   $CLEARML_API_HOST"
+    #         echo "WEB:   $CLEARML_WEB_HOST"
+    #         echo "FILES: $CLEARML_FILES_HOST"
+    #         curl -I --max-time 10 "$CLEARML_API_HOST" || true
+    #         curl -I --max-time 10 "$CLEARML_WEB_HOST" || true
+    #         curl -I --max-time 10 "$CLEARML_FILES_HOST" || true
       - name: Run ClearML pipeline
         run: |
           python -m src.pipeline --project "${CLEARML_PROJECT}" --name "${CLEARML_PIPELINE_NAME}"
