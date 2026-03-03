@@ -29,7 +29,7 @@ def ingest_data(project: str, dataset_name: str = "breast_cancer_small") -> Dict
     from clearml import Task, Dataset
     from sklearn.datasets import load_breast_cancer
     import pandas as pd
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     task = Task.init(project_name=project, task_name="ingest_data", reuse_last_task_id=False)
     logger = task.get_logger()
@@ -46,7 +46,7 @@ def ingest_data(project: str, dataset_name: str = "breast_cancer_small") -> Dict
 
     # Try to create a ClearML Dataset (may fail on older servers)
     try:
-        version = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        version = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         ds = Dataset.create(
             dataset_project=project,
             dataset_name=dataset_name,
