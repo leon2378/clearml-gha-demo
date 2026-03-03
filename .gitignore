@@ -1,0 +1,16 @@
+
+---
+
+## 5) `.gitignore`
+
+```gitignore
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+data/
+artifacts/
+reports/
+*.joblib
