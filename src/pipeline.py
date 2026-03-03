@@ -20,7 +20,7 @@ def _ensure_dir(path: str) -> str:
     return path
 
 
-@PipelineDecorator.component(cache=False)
+@PipelineDecorator.component(cache=False, execution_queue="default")
 def ingest_data(project: str, dataset_name: str = "breast_cancer_small") -> Dict[str, Any]:
     """
     Creates a tiny tabular dataset from sklearn and (if supported) versions it via ClearML Datasets.
@@ -70,7 +70,7 @@ def ingest_data(project: str, dataset_name: str = "breast_cancer_small") -> Dict
         return {"dataset_id": None, "local_path": os.path.abspath(out_dir)}
 
 
-@PipelineDecorator.component(cache=False)
+@PipelineDecorator.component(cache=False, execution_queue="default")
 def preprocess_data(project: str, data_ref: Dict[str, Any], test_size: float = 0.2, random_state: int = 42) -> str:
     """
     Loads raw CSV (from ClearML Dataset or local path), splits train/test, scales features,
@@ -124,7 +124,7 @@ def preprocess_data(project: str, data_ref: Dict[str, Any], test_size: float = 0
     return os.path.abspath(out_dir)
 
 
-@PipelineDecorator.component(cache=False)
+@PipelineDecorator.component(cache=False, execution_queue="default")
 def train_model(project: str, processed_dir: str, C: float = 1.0, max_iter: int = 200) -> Dict[str, Any]:
     """
     Trains a Logistic Regression model, logs metrics, uploads model artifact,
@@ -185,7 +185,7 @@ def train_model(project: str, processed_dir: str, C: float = 1.0, max_iter: int 
     return {"model_path": os.path.abspath(model_path), "train_task_id": task.id}
 
 
-@PipelineDecorator.component(cache=False)
+@PipelineDecorator.component(cache=False, execution_queue="default")
 def evaluate_model(project: str, processed_dir: str, model_path: str) -> str:
     """
     Evaluates trained model and logs confusion matrix plot.
@@ -242,7 +242,7 @@ def main():
         name=args.name,
         project=args.project,
         version="1.0.0",
-        pipeline_execution_queue="",
+        pipeline_execution_queue="default",
     )
     def pipeline():
         ref = ingest_data(project=args.project)
