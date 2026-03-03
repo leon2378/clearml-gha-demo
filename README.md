@@ -28,3 +28,4 @@ Add:
 ```bash
 pip install -r requirements.txt
 python -m src.pipeline --project "ClearML_GHA_Demo" --name "BreastCancer_Pipeline"
+
