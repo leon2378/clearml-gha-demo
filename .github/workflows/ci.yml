@@ -61,6 +61,15 @@ jobs:
           EOF
 
           echo "Wrote ~/clearml.conf"
+
+      - name: Test ClearML connection
+        run: |
+            python - <<EOF
+            from clearml import Task
+            t = Task.init(project_name="ClearML_GHA_Demo", task_name="gha_test_connection")
+            print("Created task:", t.id)
+            t.close()
+            EOF
       - name: Connectivity check to ClearML
         run: |
             echo "API:   $CLEARML_API_HOST"
