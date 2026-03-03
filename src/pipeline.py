@@ -245,6 +245,15 @@ def main():
         default_queue="default",
         pipeline_execution_queue="default",
         start_controller_locally=True,
+
+    # ✅ attach code to tasks so agent can clone it
+        repo="https://github.com/leon2378/clearml-gha-demo.git",
+        repo_branch="main",
+        working_dir=".",
+
+    # ✅ tell agent to install from your repo requirements.txt
+        packages="requirements.txt",
+
     )
     def pipeline():
         ref = ingest_data(project=args.project)
