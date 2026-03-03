@@ -46,7 +46,7 @@ def ingest_data(project: str, dataset_name: str = "breast_cancer_small") -> Dict
 
     # Try to create a ClearML Dataset (may fail on older servers)
     try:
-        version = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        version = datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
         ds = Dataset.create(
             dataset_project=project,
             dataset_name=dataset_name,
@@ -242,6 +242,7 @@ def main():
         name=args.name,
         project=args.project,
         version="1.0.0",
+        execution_queue="default",
     )
     def pipeline():
         ref = ingest_data(project=args.project)
