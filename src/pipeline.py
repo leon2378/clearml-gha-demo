@@ -32,6 +32,7 @@ def ingest_data(project: str, dataset_name: str = "breast_cancer_small") -> Dict
     from datetime import datetime, timezone
 
     task = Task.init(project_name=project, task_name="ingest_data", reuse_last_task_id=False)
+    task.set_packages(requirements_file="requirements.txt")
     logger = task.get_logger()
 
     out_dir = _ensure_dir("data/raw")
@@ -84,6 +85,7 @@ def preprocess_data(project: str, data_ref: Dict[str, Any], test_size: float = 0
     from sklearn.preprocessing import StandardScaler
 
     task = Task.init(project_name=project, task_name="preprocess_data", reuse_last_task_id=False)
+    task.set_packages(requirements_file="requirements.txt")
     logger = task.get_logger()
 
     dataset_id = data_ref.get("dataset_id")
@@ -138,6 +140,7 @@ def train_model(project: str, processed_dir: str, C: float = 1.0, max_iter: int 
     from sklearn.metrics import accuracy_score, roc_auc_score, log_loss
 
     task = Task.init(project_name=project, task_name="train_model", reuse_last_task_id=False)
+    task.set_packages(requirements_file="requirements.txt")
     logger = task.get_logger()
 
     # Log hyperparams
@@ -198,6 +201,7 @@ def evaluate_model(project: str, processed_dir: str, model_path: str) -> str:
     from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, accuracy_score, roc_auc_score
 
     task = Task.init(project_name=project, task_name="evaluate_model", reuse_last_task_id=False)
+    task.set_packages(requirements_file="requirements.txt")
     logger = task.get_logger()
 
     test_pack = joblib.load(os.path.join(processed_dir, "test.joblib"))
