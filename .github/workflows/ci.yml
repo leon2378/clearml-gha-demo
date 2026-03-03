@@ -31,6 +31,15 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
+      - name: Connectivity check to ClearML
+        run: |
+            echo "API:   $CLEARML_API_HOST"
+            echo "WEB:   $CLEARML_WEB_HOST"
+            echo "FILES: $CLEARML_FILES_HOST"
+            curl -I --max-time 10 "$CLEARML_API_HOST" || true
+            curl -I --max-time 10 "$CLEARML_WEB_HOST" || true
+            curl -I --max-time 10 "$CLEARML_FILES_HOST" || true
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
