@@ -31,14 +31,40 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Connectivity check to ClearML
+    #   - name: Connectivity check to ClearML
+    #     run: |
+    #         echo "API:   $CLEARML_API_HOST"
+    #         echo "WEB:   $CLEARML_WEB_HOST"
+    #         echo "FILES: $CLEARML_FILES_HOST"
+    #         curl -I --max-time 10 "$CLEARML_API_HOST" || true
+    #         curl -I --max-time 10 "$CLEARML_WEB_HOST" || true
+    #         curl -I --max-time 10 "$CLEARML_FILES_HOST" || true
+
+      - name: Configure ClearML (write clearml.conf)
         run: |
-            echo "API:   $CLEARML_API_HOST"
-            echo "WEB:   $CLEARML_WEB_HOST"
-            echo "FILES: $CLEARML_FILES_HOST"
-            curl -I --max-time 10 "$CLEARML_API_HOST" || true
-            curl -I --max-time 10 "$CLEARML_WEB_HOST" || true
-            curl -I --max-time 10 "$CLEARML_FILES_HOST" || true
+            mkdir -p ~/.clearml
+            cat > ~/clearml.conf << 'EOF'
+            api {
+                api_server: ${CLEARML_API_HOST}
+                web_server: ${CLEARML_WEB_HOST}
+                files_server: ${CLEARML_FILES_HOST}
+            credentials {
+                access_key: ${CLEARML_API_ACCESS_KEY}
+                secret_key: ${CLEARML_API_SECRET_KEY}
+                    }
+                }
+            sdk {
+                development {
+                    default_output_uri: ${CLEARML_FILES_HOST}
+                            }
+                }
+            EOF
+
+            echo "Wrote ~/clearml.conf"
+
+      - name: Sanity check ClearML SDK connectivity
+        run: |
+            python -c "from clearml import Task; t=Task.init(project_name='${CLEARML_PROJECT}', task_name='gha_sanity'); print('Task ID:', t.id); t.close()"
 
       - name: Install dependencies
         run: |
