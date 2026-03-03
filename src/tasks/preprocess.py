@@ -1,36 +1,26 @@
 import os
 import joblib
 import pandas as pd
-
+from datetime import datetime, timezone
 from clearml import Task, Dataset
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 
-def ensure_dir(p: str) -> str:
-    os.makedirs(p, exist_ok=True)
-    return p
-
-
 def main():
     project = os.environ.get("CLEARML_PROJECT", "ClearML_GHA_Demo")
-    dataset_id = os.environ.get("DATASET_ID", "")
-    local_path = os.environ.get("LOCAL_PATH", "")
+    raw_dataset_id = os.environ["RAW_DATASET_ID"]
 
-    task = Task.init(project_name=project, task_name="TEMPLATE - preprocess", reuse_last_task_id=False)
-    task.set_packages(requirements_file="requirements.txt")
+    task = Task.init(project_name=project, task_name="TEMPLATE - preprocess")
     logger = task.get_logger()
 
-    if dataset_id:
-        raw_root = Dataset.get(dataset_id=dataset_id).get_local_copy()
-    else:
-        raw_root = local_path
+    # 1️⃣ Pull raw dataset
+    raw_root = Dataset.get(dataset_id=raw_dataset_id).get_local_copy()
 
-    csv_path = os.path.join(raw_root, "breast_cancer.csv")
-    df = pd.read_csv(csv_path)
+    df = pd.read_csv(os.path.join(raw_root, "iris.csv"))
 
-    X = df.drop(columns=["target"]).values
-    y = df["target"].values
+    y = df["class"].values
+    X = df.drop(columns=["class"]).values
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
@@ -40,22 +30,26 @@ def main():
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
-    out_dir = ensure_dir("data/processed")
-    train_p = os.path.join(out_dir, "train.joblib")
-    test_p = os.path.join(out_dir, "test.joblib")
-    scaler_p = os.path.join(out_dir, "scaler.joblib")
+    os.makedirs("data/processed", exist_ok=True)
+    joblib.dump({"X": X_train, "y": y_train}, "data/processed/train.joblib")
+    joblib.dump({"X": X_test, "y": y_test}, "data/processed/test.joblib")
 
-    joblib.dump({"X_train": X_train, "y_train": y_train}, train_p)
-    joblib.dump({"X_test": X_test, "y_test": y_test}, test_p)
-    joblib.dump(scaler, scaler_p)
+    # 2️⃣ Create NEW processed dataset version
+    version = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
-    task.upload_artifact("processed_train", train_p)
-    task.upload_artifact("processed_test", test_p)
-    task.upload_artifact("scaler", scaler_p)
+    processed_ds = Dataset.create(
+        dataset_project=project,
+        dataset_name="iris_processed",
+        dataset_version=version,
+    )
 
-    task.set_parameter("Outputs/processed_dir", os.path.abspath(out_dir))
-    logger.report_text(f"Processed dir: {os.path.abspath(out_dir)}")
+    processed_ds.add_files("data/processed")
+    processed_ds.upload()
+    processed_ds.finalize()
 
+    logger.report_text(f"Created processed dataset: {processed_ds.id}")
+
+    task.set_parameter("Outputs/processed_dataset_id", processed_ds.id)
     task.close()
 
 

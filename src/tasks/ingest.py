@@ -12,7 +12,7 @@ def main():
     name = os.environ.get("DATASET_NAME", "iris_openml")
 
     task = Task.init(project_name=project, task_name="TEMPLATE - ingest")
-    task.set_packages(requirements_file="requirements.txt")
+    #task.set_packages(requirements_file="requirements.txt")
     log = task.get_logger()
 
     # 1) Download dataset (from the web)
@@ -26,7 +26,7 @@ def main():
     version = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     ds = Dataset.create(dataset_project=project, dataset_name=name, dataset_version=version)
     ds.add_files("data/raw")
-    ds.upload()
+    ds.upload(show_progress=True, verbose=True)
     ds.finalize()
 
     # 3) Output dataset id for the pipeline
