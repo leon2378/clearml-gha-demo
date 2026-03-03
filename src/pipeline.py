@@ -244,6 +244,7 @@ def main():
         version="1.0.0",
         default_queue="default",
         pipeline_execution_queue="default",
+        start_controller_locally=True,
     )
     def pipeline():
         ref = ingest_data(project=args.project)
