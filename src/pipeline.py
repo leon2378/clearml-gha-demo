@@ -243,7 +243,7 @@ def main():
         project=args.project,
         version="1.0.0",
         default_queue="default",
-        execution_queue="default",
+        pipeline_execution_queue="default",
     )
     def pipeline():
         ref = ingest_data(project=args.project)
