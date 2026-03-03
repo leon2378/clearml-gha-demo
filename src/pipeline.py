@@ -251,7 +251,7 @@ def main():
         start_controller_locally=True,
 
     # ✅ attach code to tasks so agent can clone it
-        repo="git@github.com:leon2378/clearml-gha-demo.git",
+        repo="https://github.com/leon2378/clearml-gha-demo.git",
         repo_branch="main",
         working_dir=".",
 
