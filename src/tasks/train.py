@@ -1,59 +1,95 @@
 import os
 import joblib
-import numpy as np
+from typing import Optional
 
-from clearml import Task, OutputModel
+from clearml import Task, Dataset, OutputModel
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, roc_auc_score, log_loss
+from sklearn.metrics import accuracy_score, log_loss
 
 
-def ensure_dir(p: str) -> str:
-    os.makedirs(p, exist_ok=True)
-    return p
+def _resolve_processed_dataset_id(project: str, processed_dataset_id: Optional[str]) -> str:
+    if processed_dataset_id:
+        return processed_dataset_id
+
+    datasets = Dataset.list_datasets(
+        dataset_project=project,
+        partial_name="iris_preprocessed",
+        tags=["preprocessed"],
+        only_completed=True,
+    )
+    if not datasets:
+        raise ValueError(
+            "PROCESSED_DATASET_ID is not set and no completed preprocessed dataset was found. "
+            "Run preprocess.py first or set PROCESSED_DATASET_ID."
+        )
+
+    latest = datasets[0]
+    dataset_id = getattr(latest, "id", None)
+    if not dataset_id and isinstance(latest, dict):
+        dataset_id = latest.get("id")
+
+    if not dataset_id:
+        raise ValueError("Unable to resolve processed dataset id from Dataset.list_datasets().")
+
+    return dataset_id
 
 
 def main():
     project = os.environ.get("CLEARML_PROJECT", "ClearML_GHA_Demo")
-    processed_dir = os.environ.get("PROCESSED_DIR", "data/processed")
+    processed_dataset_id = _resolve_processed_dataset_id(
+        project=project,
+        processed_dataset_id=os.environ.get("PROCESSED_DATASET_ID"),
+    )
 
     task = Task.init(project_name=project, task_name="TEMPLATE - train", reuse_last_task_id=False)
-    task.set_packages(requirements_file="requirements.txt")
     logger = task.get_logger()
+
+    logger.report_text(f"Using processed dataset id: {processed_dataset_id}")
 
     C = float(os.environ.get("C", "1.0"))
     max_iter = int(os.environ.get("MAX_ITER", "200"))
     task.connect({"C": C, "max_iter": max_iter}, name="hparams")
 
-    train_pack = joblib.load(os.path.join(processed_dir, "train.joblib"))
-    test_pack = joblib.load(os.path.join(processed_dir, "test.joblib"))
+    # 1) Pull processed dataset locally
+    processed_root = Dataset.get(dataset_id=processed_dataset_id).get_local_copy()
 
-    X_train, y_train = train_pack["X_train"], train_pack["y_train"]
-    X_test, y_test = test_pack["X_test"], test_pack["y_test"]
+    # 2) Load train/test files
+    train_pack = joblib.load(os.path.join(processed_root, "train.joblib"))
+    test_pack = joblib.load(os.path.join(processed_root, "test.joblib"))
 
+    X_train, y_train = train_pack["X"], train_pack["y"]
+    X_test, y_test = test_pack["X"], test_pack["y"]
+
+    # 3) Train model
     model = LogisticRegression(C=C, max_iter=max_iter, solver="lbfgs")
     model.fit(X_train, y_train)
 
-    probs = model.predict_proba(X_test)[:, 1]
-    preds = (probs >= 0.5).astype(int)
+    preds = model.predict(X_test)
+    probs = model.predict_proba(X_test)
 
     acc = float(accuracy_score(y_test, preds))
-    auc = float(roc_auc_score(y_test, probs))
-    ll = float(log_loss(y_test, np.vstack([1 - probs, probs]).T))
+    ll = float(log_loss(y_test, probs))
 
     logger.report_scalar("accuracy", "test", 0, acc)
-    logger.report_scalar("roc_auc", "test", 0, auc)
     logger.report_scalar("log_loss", "test", 0, ll)
 
-    out_dir = ensure_dir("artifacts")
-    model_path = os.path.join(out_dir, "logreg.joblib")
+    # 4) Save model
+    os.makedirs("artifacts", exist_ok=True)
+    model_path = os.path.abspath("artifacts/iris_logreg.joblib")
     joblib.dump(model, model_path)
+
     task.upload_artifact("trained_model", model_path)
 
-    om = OutputModel(task=task, name="breast_cancer_logreg", framework="scikit-learn", tags=["demo"])
+    om = OutputModel(
+        task=task,
+        name="iris_logreg",
+        framework="scikit-learn",
+        tags=["demo"],
+    )
     om.update_weights(model_path)
     om.publish()
 
-    task.set_parameter("Outputs/model_path", os.path.abspath(model_path))
+    task.set_parameter("Outputs/model_path", model_path)
     task.close()
 
 
