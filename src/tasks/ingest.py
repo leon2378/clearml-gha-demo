@@ -38,7 +38,7 @@ def main():
     # 3) Output dataset id for the pipeline
     task.set_parameter("Outputs/dataset_id", ds.id)
     log.report_text(f"Dataset id: {ds.id}")
-    os.environ["RAW_DATASET_ID"] = ds.id  # for local testing without pipeline controller
+    #os.environ["RAW_DATASET_ID"] = ds.id  # for local testing without pipeline controller
     task.close()
 
 
