@@ -1,8 +1,8 @@
 # src/tasks/ingest.py
 import os
-from datetime import datetime, timezone
+#from datetime import datetime, timezone
 
-import pandas as pd
+#import pandas as pd
 from clearml import Task, Dataset
 from sklearn.datasets import fetch_openml
 
@@ -17,14 +17,20 @@ def main():
 
     # 1) Download dataset (from the web)
     os.makedirs("data/raw", exist_ok=True)
-    csv_path = os.path.join("data/raw", "iris.csv")
-    df = fetch_openml(name="iris", version=1, as_frame=True).frame
+    csv_path = os.path.abspath(os.path.join("data/raw", "iris.csv"))
+
+    iris = fetch_openml(name="iris", version=1, as_frame=True)
+    df = iris.frame
     df.to_csv(csv_path, index=False)
     log.report_text(f"Saved {csv_path}")
 
-    # 2) Version it as a ClearML Dataset
-    version = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    ds = Dataset.create(dataset_project=project, dataset_name=name, dataset_version=version)
+    # 2) Create a versioned ClearML Dataset
+    ds = Dataset.create(
+        dataset_project=project,
+        dataset_name=name,
+        dataset_tags=["raw"],
+        dataset_version="1.0",
+    )
     ds.add_files("data/raw")
     ds.upload(show_progress=True, verbose=True)
     ds.finalize()
@@ -32,7 +38,6 @@ def main():
     # 3) Output dataset id for the pipeline
     task.set_parameter("Outputs/dataset_id", ds.id)
     log.report_text(f"Dataset id: {ds.id}")
-
     task.close()
 
 
