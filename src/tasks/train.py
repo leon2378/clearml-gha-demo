@@ -23,10 +23,11 @@ def _resolve_processed_dataset_id(project: str, processed_dataset_id: Optional[s
             "Run preprocess.py first or set PROCESSED_DATASET_ID."
         )
 
-    latest = datasets[0]
-    dataset_id = getattr(latest, "id", None)
-    if not dataset_id and isinstance(latest, dict):
-        dataset_id = latest.get("id")
+    latest = max(
+        datasets,
+        key=lambda ds: str(ds.get("created", "")) if isinstance(ds, dict) else str(getattr(ds, "created", "")),
+    )
+    dataset_id = latest.get("id") if isinstance(latest, dict) else getattr(latest, "id", None)
 
     if not dataset_id:
         raise ValueError("Unable to resolve processed dataset id from Dataset.list_datasets().")
@@ -70,8 +71,8 @@ def main():
     acc = float(accuracy_score(y_test, preds))
     ll = float(log_loss(y_test, probs))
 
-    logger.report_scalar("accuracy", "test", 0, acc)
-    logger.report_scalar("log_loss", "test", 0, ll)
+    logger.report_scalar("accuracy", "test", value=acc, iteration=0)
+    logger.report_scalar("log_loss", "test", value=ll, iteration=0)
 
     # 4) Save model
     os.makedirs("artifacts", exist_ok=True)

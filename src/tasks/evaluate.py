@@ -29,8 +29,8 @@ def main():
 
     acc = float(accuracy_score(y_test, preds))
     auc = float(roc_auc_score(y_test, probs))
-    logger.report_scalar("accuracy", "test", 0, acc)
-    logger.report_scalar("roc_auc", "test", 0, auc)
+    logger.report_scalar("accuracy", "test", value=acc, iteration=0)
+    logger.report_scalar("roc_auc", "test", value=auc, iteration=0)
 
     cm = confusion_matrix(y_test, preds)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm)
