@@ -1,10 +1,13 @@
 import os
 import joblib
+import warnings
 from typing import Optional
 
 from clearml import Task, Dataset, OutputModel
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, log_loss
+from sklearn.exceptions import ConvergenceWarning
+from sklearn.metrics import accuracy_score, log_loss, confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 
 
 def _resolve_processed_dataset_id(project: str, processed_dataset_id: Optional[str]) -> str:
@@ -49,7 +52,8 @@ def main():
 
     C = float(os.environ.get("C", "1.0"))
     max_iter = int(os.environ.get("MAX_ITER", "200"))
-    task.connect({"C": C, "max_iter": max_iter}, name="hparams")
+    log_every = max(1, int(os.environ.get("LOG_EVERY", "10")))
+    task.connect({"C": C, "max_iter": max_iter, "log_every": log_every}, name="hparams")
 
     # 1) Pull processed dataset locally
     processed_root = Dataset.get(dataset_id=processed_dataset_id).get_local_copy()
@@ -62,24 +66,59 @@ def main():
     X_test, y_test = test_pack["X"], test_pack["y"]
 
     # 3) Train model
-    model = LogisticRegression(C=C, max_iter=max_iter, solver="lbfgs")
-    model.fit(X_train, y_train)
+    model = LogisticRegression(C=C, max_iter=1, solver="lbfgs", warm_start=True)
+    preds = None
+    probs = None
 
-    preds = model.predict(X_test)
-    probs = model.predict_proba(X_test)
+    for step in range(1, max_iter + 1):
+        # We intentionally run one solver step per fit() to report a scalar curve over iterations.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=ConvergenceWarning)
+            model.fit(X_train, y_train)
 
-    acc = float(accuracy_score(y_test, preds))
-    ll = float(log_loss(y_test, probs))
+        if step == 1 or step % log_every == 0 or step == max_iter:
+            preds = model.predict(X_test)
+            probs = model.predict_proba(X_test)
+            acc = float(accuracy_score(y_test, preds))
+            ll = float(log_loss(y_test, probs))
+            logger.report_scalar("accuracy", "test", value=acc, iteration=step)
+            logger.report_scalar("log_loss", "test", value=ll, iteration=step)
 
-    logger.report_scalar("accuracy", "test", value=acc, iteration=0)
-    logger.report_scalar("log_loss", "test", value=ll, iteration=0)
+    if preds is None or probs is None:
+        preds = model.predict(X_test)
+        probs = model.predict_proba(X_test)
+
+    labels = [str(c) for c in model.classes_]
+    cm = confusion_matrix(y_test, preds, labels=model.classes_)
+    logger.report_confusion_matrix(
+        title="confusion_matrix",
+        series="train",
+        matrix=cm,
+        iteration=0,
+        xaxis="Predicted",
+        yaxis="True",
+        xlabels=labels,
+        ylabels=labels,
+        yaxis_reversed=True,
+    )
 
     # 4) Save model
     os.makedirs("artifacts", exist_ok=True)
     model_path = os.path.abspath("artifacts/iris_logreg.joblib")
     joblib.dump(model, model_path)
 
+    # Debug Samples tab: upload rendered confusion matrix image
+    fig, ax = plt.subplots(figsize=(8, 8))
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
+    disp.plot(ax=ax, values_format="d", colorbar=True)
+    fig.tight_layout()
+    cm_path = os.path.abspath("artifacts/confusion_matrix.png")
+    fig.savefig(cm_path, dpi=150)
+    plt.close(fig)
+    logger.report_image("confusion_matrix", "train", iteration=0, local_path=cm_path)
+
     task.upload_artifact("trained_model", model_path)
+    task.upload_artifact("confusion_matrix_png", cm_path)
 
     om = OutputModel(
         task=task,
@@ -91,6 +130,7 @@ def main():
     om.publish()
 
     task.set_parameter("Outputs/model_path", model_path)
+    task.flush(wait_for_uploads=True)
     task.close()
 
 
