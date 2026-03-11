@@ -4,12 +4,7 @@ import matplotlib.pyplot as plt
 from typing import Optional
 
 from clearml import Task, Dataset
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, accuracy_score, roc_auc_score
-
-
-def ensure_dir(p: str) -> str:
-    os.makedirs(p, exist_ok=True)
-    return p
+from sklearn.metrics import accuracy_score, log_loss, confusion_matrix, ConfusionMatrixDisplay
 
 
 def _resolve_processed_dataset_id(project: str, processed_dataset_id: Optional[str]) -> str:
@@ -35,87 +30,76 @@ def _resolve_processed_dataset_id(project: str, processed_dataset_id: Optional[s
     dataset_id = latest.get("id") if isinstance(latest, dict) else getattr(latest, "id", None)
     if not dataset_id:
         raise ValueError("Unable to resolve processed dataset id from Dataset.list_datasets().")
+
     return dataset_id
-
-
-def _load_test_pack(project: str, processed_dir: Optional[str], processed_dataset_id: Optional[str]) -> dict:
-    if processed_dir:
-        return joblib.load(os.path.join(processed_dir, "test.joblib"))
-
-    dataset_id = _resolve_processed_dataset_id(project, processed_dataset_id)
-    processed_root = Dataset.get(dataset_id=dataset_id).get_local_copy()
-    return joblib.load(os.path.join(processed_root, "test.joblib"))
-
-
-def _unpack_test_pack(test_pack: dict):
-    if "X" in test_pack and "y" in test_pack:
-        return test_pack["X"], test_pack["y"]
-    if "X_test" in test_pack and "y_test" in test_pack:
-        return test_pack["X_test"], test_pack["y_test"]
-    raise KeyError("test.joblib does not contain expected keys (X/y or X_test/y_test).")
 
 
 def main():
     project = os.environ.get("CLEARML_PROJECT", "ClearML_GHA_Demo")
     processed_dir = os.environ.get("PROCESSED_DIR")
-    processed_dataset_id = os.environ.get("PROCESSED_DATASET_ID")
     model_path = os.environ.get("MODEL_PATH", "artifacts/iris_logreg.joblib")
+    eval_log_every = max(1, int(os.environ.get("EVAL_LOG_EVERY", "5")))
 
-    task = Task.init(project_name=project, task_name="TEMPLATE - evaluate", reuse_last_task_id=False)
+    if processed_dir:
+        processed_root = processed_dir
+    else:
+        processed_dataset_id = _resolve_processed_dataset_id(
+            project=project,
+            processed_dataset_id=os.environ.get("PROCESSED_DATASET_ID"),
+        )
+        processed_root = Dataset.get(dataset_id=processed_dataset_id).get_local_copy()
+
+    task = Task.init(
+        project_name=project,
+        task_name="TEMPLATE - evaluate",
+        reuse_last_task_id=False,
+        auto_connect_frameworks={"matplotlib": False},
+    )
     logger = task.get_logger()
+    task.connect({"eval_log_every": eval_log_every}, name="hparams")
 
-    test_pack = _load_test_pack(project, processed_dir, processed_dataset_id)
-    X_test, y_test = _unpack_test_pack(test_pack)
+    test_pack = joblib.load(os.path.join(processed_root, "test.joblib"))
+    X_test, y_test = test_pack["X"], test_pack["y"]
 
     model = joblib.load(model_path)
     preds = model.predict(X_test)
     probs = model.predict_proba(X_test)
 
-    acc = float(accuracy_score(y_test, preds))
-    logger.report_scalar("accuracy", "test", value=acc, iteration=0)
+    # Log running metrics so the scalar chart has multiple points.
+    n = len(y_test)
+    for i in range(eval_log_every, n + 1, eval_log_every):
+        acc_i = float(accuracy_score(y_test[:i], preds[:i]))
+        ll_i = float(log_loss(y_test[:i], probs[:i], labels=model.classes_))
+        logger.report_scalar("accuracy", "test", value=acc_i, iteration=i)
+        logger.report_scalar("log_loss", "test", value=ll_i, iteration=i)
+    if n % eval_log_every != 0:
+        acc_i = float(accuracy_score(y_test, preds))
+        ll_i = float(log_loss(y_test, probs, labels=model.classes_))
+        logger.report_scalar("accuracy", "test", value=acc_i, iteration=n)
+        logger.report_scalar("log_loss", "test", value=ll_i, iteration=n)
 
-    try:
-        if probs.shape[1] == 2:
-            auc = float(roc_auc_score(y_test, probs[:, 1]))
-        else:
-            auc = float(roc_auc_score(y_test, probs, multi_class="ovr", average="macro"))
-        logger.report_scalar("roc_auc", "test", value=auc, iteration=0)
-    except ValueError as ex:
-        logger.report_text(f"roc_auc not reported: {ex}", print_console=False)
+    labels = [str(c) for c in model.classes_]
+    cm = confusion_matrix(y_test, preds, labels=model.classes_)
 
-    classes = getattr(model, "classes_", None)
-    if classes is None:
-        cm = confusion_matrix(y_test, preds)
-        labels = sorted({str(v) for v in y_test})
-    else:
-        cm = confusion_matrix(y_test, preds, labels=classes)
-        labels = [str(c) for c in classes]
-
-    logger.report_confusion_matrix(
+    fig, ax = plt.subplots(figsize=(8, 8))
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
+    disp.plot(ax=ax, values_format="d", colorbar=True)
+    fig.tight_layout()
+    logger.report_matplotlib_figure(
         title="confusion_matrix",
         series="test",
-        matrix=cm,
-        iteration=0,
-        xaxis="Predicted",
-        yaxis="True",
-        xlabels=labels,
-        ylabels=labels,
-        yaxis_reversed=True,
+        figure=fig,
+        iteration=n,
+        report_image=False,
     )
 
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    disp.plot(ax=ax, values_format="d")
-
-    out_dir = ensure_dir("reports")
-    plot_path = os.path.join(out_dir, "confusion_matrix.png")
-    fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+    os.makedirs("reports", exist_ok=True)
+    cm_path = os.path.abspath("reports/test_confusion_matrix.png")
+    fig.savefig(cm_path, dpi=150)
     plt.close(fig)
 
-    logger.report_image("confusion_matrix", "test", iteration=0, local_path=plot_path)
-    task.upload_artifact("confusion_matrix_png", plot_path)
+    task.upload_artifact("test_confusion_matrix", cm_path)
+    #task.upload_artifact("best_model", model_path)
     task.flush(wait_for_uploads=True)
     task.close()
 
