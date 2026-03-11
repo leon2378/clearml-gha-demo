@@ -67,6 +67,7 @@ def main():
 
     # Log running metrics so the scalar chart has multiple points.
     n = len(y_test)
+    #n = 100
     for i in range(eval_log_every, n + 1, eval_log_every):
         acc_i = float(accuracy_score(y_test[:i], preds[:i]))
         ll_i = float(log_loss(y_test[:i], probs[:i], labels=model.classes_))
