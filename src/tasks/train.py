@@ -45,7 +45,12 @@ def main():
         processed_dataset_id=os.environ.get("PROCESSED_DATASET_ID"),
     )
 
-    task = Task.init(project_name=project, task_name="TEMPLATE - train", reuse_last_task_id=False)
+    task = Task.init(
+        project_name=project,
+        task_name="TEMPLATE - train",
+        reuse_last_task_id=False,
+        auto_connect_frameworks={"matplotlib": False},
+    )
     logger = task.get_logger()
 
     logger.report_text(f"Using processed dataset id: {processed_dataset_id}")
@@ -90,17 +95,6 @@ def main():
 
     labels = [str(c) for c in model.classes_]
     cm = confusion_matrix(y_test, preds, labels=model.classes_)
-    logger.report_confusion_matrix(
-        title="confusion_matrix",
-        series="train",
-        matrix=cm,
-        iteration=max_iter,
-        xaxis="Predicted",
-        yaxis="True",
-        xlabels=labels,
-        ylabels=labels,
-        yaxis_reversed=True,
-    )
 
     # 4) Save model
     os.makedirs("artifacts", exist_ok=True)
@@ -111,12 +105,19 @@ def main():
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
     disp.plot(ax=ax, values_format="d", colorbar=True)
     fig.tight_layout()
-    cm_path = os.path.abspath("artifacts/confusion_matrix.png")
+    logger.report_matplotlib_figure(
+        title="confusion_matrix",
+        series="train",
+        figure=fig,
+        iteration=max_iter,
+        report_image=False,
+    )
+    cm_path = os.path.abspath("artifacts/train_confusion_matrix.png")
     fig.savefig(cm_path, dpi=150)
     plt.close(fig)
 
     # Upload confusion matrix artifact
-    task.upload_artifact("confusion_matrix", cm_path)
+    task.upload_artifact("train_confusion_matrix", cm_path)
     task.upload_artifact("trained_model", model_path)
 
     om = OutputModel(
