@@ -2,12 +2,12 @@ import os
 import joblib
 import warnings
 from typing import Optional
+import matplotlib.pyplot as plt
 
 from clearml import Task, Dataset, OutputModel
 from sklearn.linear_model import LogisticRegression
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.metrics import accuracy_score, log_loss, confusion_matrix, ConfusionMatrixDisplay
-import matplotlib.pyplot as plt
 
 
 def _resolve_processed_dataset_id(project: str, processed_dataset_id: Optional[str]) -> str:
@@ -94,7 +94,7 @@ def main():
         title="confusion_matrix",
         series="train",
         matrix=cm,
-        iteration=0,
+        iteration=max_iter,
         xaxis="Predicted",
         yaxis="True",
         xlabels=labels,
@@ -107,7 +107,6 @@ def main():
     model_path = os.path.abspath("artifacts/iris_logreg.joblib")
     joblib.dump(model, model_path)
 
-    # Debug Samples tab: upload rendered confusion matrix image
     fig, ax = plt.subplots(figsize=(8, 8))
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
     disp.plot(ax=ax, values_format="d", colorbar=True)
@@ -115,10 +114,10 @@ def main():
     cm_path = os.path.abspath("artifacts/confusion_matrix.png")
     fig.savefig(cm_path, dpi=150)
     plt.close(fig)
-    logger.report_image("confusion_matrix", "train", iteration=0, local_path=cm_path)
 
+    # Upload confusion matrix artifact
+    task.upload_artifact("confusion_matrix", cm_path)
     task.upload_artifact("trained_model", model_path)
-    task.upload_artifact("confusion_matrix_png", cm_path)
 
     om = OutputModel(
         task=task,
